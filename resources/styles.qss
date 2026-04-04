@@ -1,0 +1,197 @@
+/* 50年代户籍卡 OCR 识别系统 — Qt 样式表 */
+
+/* 全局字体 */
+QWidget {
+    font-family: "Microsoft YaHei", "SimHei", sans-serif;
+    font-size: 13px;
+}
+
+/* 主窗口 */
+QMainWindow {
+    background-color: #f5f5f5;
+}
+
+/* 菜单栏 */
+QMenuBar {
+    background-color: #ffffff;
+    color: #333333;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 2px;
+}
+
+QMenuBar::item {
+    color: #333333;
+    padding: 4px 10px;
+}
+
+QMenuBar::item:selected {
+    background-color: #e3f2fd;
+    color: #1565c0;
+    border-radius: 4px;
+}
+
+QMenu {
+    background-color: #ffffff;
+    color: #333333;
+    border: 1px solid #e0e0e0;
+    padding: 4px;
+}
+
+QMenu::item {
+    color: #333333;
+    padding: 6px 30px 6px 20px;
+    border-radius: 4px;
+}
+
+QMenu::item:selected {
+    background-color: #e3f2fd;
+    color: #1565c0;
+}
+
+QMenu::item:disabled {
+    color: #bdbdbd;
+}
+
+QMenu::separator {
+    height: 1px;
+    background-color: #e0e0e0;
+    margin: 4px 10px;
+}
+
+/* 工具栏 */
+QToolBar {
+    background-color: #ffffff;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 4px;
+    spacing: 4px;
+}
+
+QToolBar QToolButton {
+    color: #333333;
+    padding: 6px 12px;
+    border-radius: 4px;
+    background-color: transparent;
+}
+
+QToolBar QToolButton:hover {
+    background-color: #e3f2fd;
+}
+
+QToolBar QToolButton:pressed {
+    background-color: #bbdefb;
+}
+
+QToolBar QToolButton:disabled {
+    color: #bdbdbd;
+}
+
+/* 状态栏 */
+QStatusBar {
+    background-color: #ffffff;
+    color: #555555;
+    border-top: 1px solid #e0e0e0;
+    padding: 2px;
+}
+
+QStatusBar QLabel {
+    color: #555555;
+    padding: 0 10px;
+}
+
+/* 缩略图面板 */
+QListWidget {
+    background-color: #fafafa;
+    border: none;
+    border-right: 1px solid #e0e0e0;
+    outline: none;
+}
+
+QListWidget::item {
+    padding: 4px;
+    border-radius: 4px;
+    margin: 2px;
+}
+
+QListWidget::item:selected {
+    background-color: #e3f2fd;
+    border: 1px solid #90caf9;
+}
+
+QListWidget::item:hover {
+    background-color: #f5f5f5;
+}
+
+/* 表格 */
+QTableWidget {
+    background-color: #ffffff;
+    color: #333333;
+    border: none;
+    gridline-color: #e0e0e0;
+    selection-background-color: #e3f2fd;
+    selection-color: #000000;
+}
+
+QTableWidget::item {
+    color: #333333;
+    padding: 4px 8px;
+}
+
+QHeaderView::section {
+    background-color: #f5f5f5;
+    color: #333333;
+    padding: 6px 8px;
+    border: none;
+    border-bottom: 2px solid #4472c4;
+    font-weight: bold;
+}
+
+/* 进度条 */
+QProgressBar {
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    text-align: center;
+    height: 20px;
+    background-color: #f5f5f5;
+}
+
+QProgressBar::chunk {
+    background-color: #4472c4;
+    border-radius: 3px;
+}
+
+/* 分割器 */
+QSplitter::handle {
+    background-color: #e0e0e0;
+    width: 2px;
+}
+
+QSplitter::handle:hover {
+    background-color: #4472c4;
+}
+
+/* 滚动条 */
+QScrollBar:vertical {
+    border: none;
+    background: #f5f5f5;
+    width: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background: #c0c0c0;
+    min-height: 30px;
+    border-radius: 5px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #a0a0a0;
+}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+/* 消息框 */
+QMessageBox {
+    background-color: #ffffff;
+}

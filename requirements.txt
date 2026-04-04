@@ -1,0 +1,28 @@
+# 50年代老旧户籍卡 OCR 识别系统 — 依赖清单
+# Python 3.12+
+
+# GUI
+PySide6>=6.6
+
+# OCR / ML
+torch>=2.6.0
+transformers>=4.46.3
+accelerate
+sentencepiece
+# flash-attn>=2.7.3  # 需要单独安装，pip install flash-attn --no-build-isolation
+
+# 图像处理
+opencv-python>=4.8
+numpy
+Pillow
+
+# 导出格式
+openpyxl
+python-docx
+reportlab
+
+# 配置
+PyYAML
+
+# 开发
+pytest

@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# 虚拟环境
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 运行输出
+output/
+*.log
+ocr_app.log
+
+# 测试缓存
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 系统文件
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# 敏感/临时文件
+nul
+=4.*
+find_python.ps1
+
+# Playwright MCP
+.playwright-mcp/
+
+# Spec workflow (开发工具配置)
+.spec-workflow/
+
+# Claude Code
+.claude/

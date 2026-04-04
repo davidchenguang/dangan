@@ -1,0 +1,37 @@
+# 50年代老旧户籍卡 OCR 识别系统 — 配置文件
+
+model:
+  # DeepSeek-OCR-2 本地模型路径
+  path: "C:\\Users\\cheng\\.lmstudio\\models\\forkjoin-ai\\deepseek-ocr-2"
+  device: "cuda"
+  dtype: "bfloat16"
+
+preprocess:
+  # 核心参数（经实验验证的最佳配置）
+  scale: 2.0               # 放大倍数 — 使手写文字达到模型可识别阈值
+  clahe_clip: 3.0          # CLAHE 对比度限制
+  enhance_contrast: true   # 对比度增强 (CLAHE)
+
+  # 高级参数（默认关闭，按需启用）
+  auto_rotate: false       # 倾斜校正
+  repair_edges: false      # 边缘修补
+  normalize_background: false  # 背景归一化（去黄）
+  remove_stamps: false     # 印章去除
+  denoise: false           # 去噪（默认关闭，会破坏笔画细节）
+  binarize: false          # 二值化（默认关闭，DeepSeek-OCR-2 对灰度图效果更好）
+
+ocr:
+  # 推理参数（硬编码最佳值，一般无需修改）
+  base_size: 1024
+  image_size: 768
+  crop_mode: true          # 必须开启 — 放大后需要 crop 产生多 patch
+  eval_mode: true          # 必须为 True
+  prompt: "json"            # 默认 Prompt 策略: verbatim | markdown | json
+
+export:
+  default_dir: "./output"
+  excel_freeze_header: true
+
+gui:
+  thumbnail_size: 120
+  default_zoom_fit: true
