@@ -17,7 +17,9 @@ from core.models import (
     HouseholdCard,
     PreprocessConfig,
     PROMPT_MARKDOWN,
+    PROMPT_STRUCTURED,
     PROMPT_VERBATIM,
+    VotingResult,
 )
 from core.ocr_engine import DeepSeekOCREngine, OCREngine
 from core.preprocessor import ImagePreprocessor
@@ -27,6 +29,7 @@ logger = logging.getLogger(__name__)
 # Prompt 映射
 PROMPT_MAP: dict[str, str] = {
     "verbatim": PROMPT_VERBATIM,
+    "structured": PROMPT_STRUCTURED,
     "markdown": PROMPT_MARKDOWN,
     "json": CARD_OCR_PROMPT,
 }
@@ -40,6 +43,7 @@ class PipelineResult:
     elapsed_seconds: float = 0.0
     success: bool = True
     error: str = ""
+    confidence: dict[str, float] | None = None  # 投票置信度（多轮模式）
 
 
 class OcrPipeline:
@@ -55,10 +59,11 @@ class OcrPipeline:
         self,
         model_path: str,
         preprocess_config: PreprocessConfig | None = None,
-        prompt: str = "verbatim",
+        prompt: str = "structured",
         base_size: int = 1024,
         image_size: int = 768,
         crop_mode: bool = True,
+        voting_rounds: int = 1,
     ) -> None:
         self._engine = DeepSeekOCREngine(
             model_path=model_path,
@@ -69,6 +74,7 @@ class OcrPipeline:
         self._preprocessor = ImagePreprocessor(preprocess_config or PreprocessConfig())
         self._extractor = FieldExtractor()
         self._prompt_name = prompt
+        self._voting_rounds = voting_rounds
         self._initialized = False
 
     def initialize(self) -> None:
@@ -110,19 +116,32 @@ class OcrPipeline:
                 actual_image = self._preprocessor.process(image_path, output_dir)
                 logger.info("使用预处理图片: %s", actual_image)
 
-            # Step 2: OCR 识别
+            # Step 2: OCR 识别 + 投票
             prompt = PROMPT_MAP.get(self._prompt_name, PROMPT_VERBATIM)
-            raw_text = self._engine.recognize(actual_image, prompt)
 
-            # Step 3: 去重
-            clean_text = deduplicate_output(raw_text)
+            if self._voting_rounds > 1:
+                # 多轮投票模式
+                from core.voting import OcrVotingEngine
+                voter = OcrVotingEngine(
+                    engine=self._engine,
+                    extractor=self._extractor,
+                    rounds=self._voting_rounds,
+                )
+                voting_result = voter.recognize_with_voting(actual_image, prompt)
+                card = voting_result.card
+                confidence = voting_result.confidence
+                logger.info(
+                    "投票完成: %d 轮，平均置信度 %.2f",
+                    voting_result.rounds,
+                    sum(confidence.values()) / max(len(confidence), 1),
+                )
+            else:
+                # 单轮模式（向后兼容）
+                raw_text = self._engine.recognize(actual_image, prompt)
+                clean_text = deduplicate_output(raw_text)
+                card = self._extractor.extract(clean_text)
+                confidence = {}
 
-            # 调试：输出 OCR 原始文本前 500 字符
-            logger.debug("OCR 原始输出 (前500字): %s", raw_text[:500])
-            logger.debug("去重后文本 (前500字): %s", clean_text[:500])
-
-            # Step 4: 字段提取
-            card = self._extractor.extract(clean_text)
             card.source_image = str(image_path)
 
             elapsed = _time.time() - start
@@ -133,6 +152,7 @@ class OcrPipeline:
                 preprocessed_path=actual_image if preprocess else None,
                 elapsed_seconds=elapsed,
                 success=True,
+                confidence=confidence,
             )
 
         except Exception as e:

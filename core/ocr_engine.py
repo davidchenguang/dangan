@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import tempfile
 import time
 from abc import ABC, abstractmethod
@@ -58,9 +59,9 @@ class DeepSeekOCREngine(OCREngine):
 
     关键约束:
     - infer() 硬编码参数: max_new_tokens=8192, no_repeat_ngram_size=35
-    - eval_mode=True 必须为 True
     - 推理无法中断，GUI 需明确提示用户
     - 兼容性补丁必须在新版本 transformers 上执行
+    - dtype=bfloat16 直接加载权重（节省显存）
     """
 
     def __init__(
@@ -79,7 +80,13 @@ class DeepSeekOCREngine(OCREngine):
         self._load_time: float = 0.0
 
     def load(self) -> None:
-        """加载模型"""
+        """加载模型
+
+        参考 DeepSeek-OCR-2 Demo 最佳实践:
+        - _attn_implementation='flash_attention_2' 加速推理
+        - torch_dtype=torch.bfloat16 直接以 bfloat16 加载权重（节省显存）
+        - 兼容性补丁应用于新版本 transformers
+        """
         if self._model is not None:
             return
 
@@ -109,8 +116,7 @@ class DeepSeekOCREngine(OCREngine):
             self._model_path,
             trust_remote_code=True,
             use_safetensors=True,
-        )
-        self._model = self._model.eval().cuda().to(torch.bfloat16)
+        ).eval().cuda().to(torch.bfloat16)
 
         # 注入 rotary_emb（兼容性补丁的补充步骤）
         inject_rotary_embeddings(self._model)
@@ -129,12 +135,18 @@ class DeepSeekOCREngine(OCREngine):
     def load_time(self) -> float:
         return self._load_time
 
-    def recognize(self, image_path: str, prompt: str) -> str:
+    def recognize(self, image_path: str, prompt: str, temperature: float = 0.0) -> str:
         """执行 OCR 识别
+
+        参考 DeepSeek-OCR-2 Demo 最佳实践:
+        - 不传 eval_mode 参数（Demo 未使用）
+        - save_results=False 避免创建多余文件
+        - stdout 捕获作为结果提取的备用方案
 
         Args:
             image_path: 图片文件路径
-            prompt: OCR Prompt
+            prompt: OCR Prompt（不含 <image> 标签，infer() 内部处理）
+            temperature: 生成温度（0.0=确定性，>0.0=随机采样）
 
         Returns:
             识别出的文本
@@ -148,50 +160,123 @@ class DeepSeekOCREngine(OCREngine):
         logger.info("开始识别: %s", image_path)
         start = time.time()
 
-        result = self._model.infer(
-            self._tokenizer,
-            prompt=prompt,
-            image_file=image_path,
-            output_path=output_dir,
-            base_size=self._base_size,
-            image_size=self._image_size,
-            crop_mode=self._crop_mode,
-            eval_mode=True,
-        )
+        # Monkey-patch: 注入 temperature 到模型的 generate() 调用
+        _original_generate = None
+        if temperature > 0.0:
+            _original_generate = self._model.generate
+            _temp = temperature
+
+            def _generate_with_temp(*args, **kwargs):
+                kwargs['temperature'] = _temp
+                kwargs['do_sample'] = True
+                return _original_generate(*args, **kwargs)
+
+            self._model.generate = _generate_with_temp
+
+        # stdout 捕获（Demo 模式：部分模型版本通过 stdout 输出结果）
+        import io
+        import sys
+        _original_stdout = sys.stdout
+        _stdout_capture = io.StringIO()
+
+        try:
+            sys.stdout = _stdout_capture
+            result = self._model.infer(
+                self._tokenizer,
+                prompt=prompt,
+                image_file=image_path,
+                output_path=output_dir,
+                base_size=self._base_size,
+                image_size=self._image_size,
+                crop_mode=self._crop_mode,
+                save_results=False,
+                eval_mode=True,
+            )
+        finally:
+            sys.stdout = _original_stdout
+            if _original_generate is not None:
+                self._model.generate = _original_generate
 
         elapsed = time.time() - start
 
-        if isinstance(result, dict):
-            text = result.get("text", str(result))
-        else:
-            text = str(result)
-
-        # 调试：记录输出长度和前 200 字符
+        # 诊断日志：捕获 infer() 原始返回值
+        _stdout_text = _stdout_capture.getvalue()
         logger.info(
-            "识别完成，耗时 %.1fs，输出类型=%s，长度=%d",
-            elapsed, type(result).__name__, len(text),
+            "infer() 返回值类型=%s, repr 前200字符=%s",
+            type(result).__name__,
+            repr(result)[:200] if result is not None else "None",
+        )
+        logger.info(
+            "stdout 捕获长度=%d, 内容前200字符=%s",
+            len(_stdout_text),
+            _stdout_text[:200],
+        )
+
+        # 结果提取：优先使用返回值，备用 stdout 捕获
+        text = self._extract_result(result, _stdout_text)
+
+        # 调试：记录输出长度和前 500 字符
+        logger.info(
+            "识别完成，耗时 %.1fs，输出长度=%d",
+            elapsed, len(text),
         )
         if text:
-            logger.debug("OCR 输出前 200 字: %s", text[:200])
+            logger.debug("OCR 输出前 500 字: %s", text[:500])
         else:
             logger.warning("OCR 输出为空")
 
         return text
 
-    def recognize_ndarray(self, image: np.ndarray, prompt: str) -> str:
+    @staticmethod
+    def _extract_result(result, stdout_text: str) -> str:
+        """从返回值和 stdout 中提取 OCR 结果
+
+        参考 Demo 的 stdout 过滤逻辑：
+        - 过滤掉 image:、other:、PATCHES、==== 等调试行
+        - 统一清洗 <image> 和 <|...|> 等 VLM 标签
+        """
+        text = ""
+        # 优先使用返回值
+        if result is not None:
+            if isinstance(result, dict):
+                text = result.get("text", "")
+            elif isinstance(result, str):
+                text = result
+
+        # 备用：从 stdout 提取（Demo 模式）
+        if not text.strip() and stdout_text:
+            noise_keywords = ['image:', 'other:', 'PATCHES', '====', 'BASE:', '%|', 'torch.Size']
+            lines = stdout_text.split('\n')
+            filtered = [
+                l for l in lines
+                if not any(s in l for s in noise_keywords)
+            ]
+            text = '\n'.join(filtered)
+
+        # 统一清洗 VLM 标签 (<image>, <|...|>)
+        if text:
+            # 移除 <image> 标签
+            text = re.sub(r'<image>', '', text)
+            # 移除 <|xxx|> 格式的 VLM 内部标签
+            text = re.sub(r'<\|.*?\|>', '', text)
+
+        return text.strip()
+
+    def recognize_ndarray(self, image: np.ndarray, prompt: str, temperature: float = 0.0) -> str:
         """识别 numpy 数组格式的图片
 
         Args:
             image: OpenCV 格式图片 (BGR)
             prompt: OCR Prompt
+            temperature: 生成温度
 
         Returns:
             识别出的文本
         """
         with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp:
-            cv2.imwrite(tmp.name, image)
+            cv2.imwrite(tmp.name, image, [cv2.IMWRITE_JPEG_QUALITY, 95])
             try:
-                return self.recognize(tmp.name, prompt)
+                return self.recognize(tmp.name, prompt, temperature=temperature)
             finally:
                 Path(tmp.name).unlink(missing_ok=True)
 

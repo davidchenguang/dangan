@@ -116,12 +116,13 @@ class AppConfig:
         return self._data.get("ocr", {}).get("crop_mode", True)
 
     @property
-    def ocr_eval_mode(self) -> bool:
-        return self._data.get("ocr", {}).get("eval_mode", True)
+    def ocr_prompt(self) -> str:
+        return self._data.get("ocr", {}).get("prompt", "structured")
 
     @property
-    def ocr_prompt(self) -> str:
-        return self._data.get("ocr", {}).get("prompt", "json")
+    def ocr_voting_rounds(self) -> int:
+        """OCR 多轮投票次数（1=单轮不投票）"""
+        return int(self._data.get("ocr", {}).get("voting_rounds", 1))
 
     @property
     def export_dir(self) -> str:

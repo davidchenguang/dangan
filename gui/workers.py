@@ -87,7 +87,7 @@ class ModelLoadWorker(QRunnable):
         super().__init__()
         self.pipeline = pipeline
         self.signals = ModelLoadSignals()
-        self.setAutoDelete(True)
+        self.setAutoDelete(False)  # MainWindow 持有引用，手动管理生命周期
 
     @Slot()
     def run(self) -> None:

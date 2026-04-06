@@ -13,6 +13,7 @@ from core.models import (
     OccupationInfo,
     PreprocessConfig,
     ProcessingStatus,
+    PROMPT_STRUCTURED,
     PROMPT_VERBATIM,
 )
 
@@ -123,9 +124,18 @@ class TestPromptTemplates:
     def test_verbatim_prompt(self):
         assert "<image>" in PROMPT_VERBATIM
         assert "逐字" in PROMPT_VERBATIM
+        assert PROMPT_VERBATIM.startswith("<image>")
+
+    def test_structured_prompt(self):
+        assert "<image>" in PROMPT_STRUCTURED
+        assert "<|grounding|>" not in PROMPT_STRUCTURED
+        assert "户主或与户主关系" in PROMPT_STRUCTURED
+        assert "姓名" in PROMPT_STRUCTURED
+        assert PROMPT_STRUCTURED.startswith("<image>")
 
     def test_json_prompt(self):
         assert "<image>" in CARD_OCR_PROMPT
         assert "<|grounding|>" in CARD_OCR_PROMPT
         assert "JSON" in CARD_OCR_PROMPT
         assert "姓名" in CARD_OCR_PROMPT
+        assert CARD_OCR_PROMPT.startswith("<image>")

@@ -124,18 +124,49 @@ class FieldRegion:
 
 # ── Prompt 模板 ──
 
-# 最佳 prompt（经测试验证）：简洁直接
-# 关键发现：prompt 越短越好，长 prompt 会触发模型重复循环或空输出
+# 最佳 prompt（参考 DeepSeek-OCR-2 Demo "Free OCR" 模式）
+# 简洁直接，避免模型输出 HTML/结构化格式
+# 注意：必须包含 <image> 标签，模型的 infer() 依赖此标签定位图像 token 插入位置
 PROMPT_VERBATIM = "<image>\n请逐字精确识别这张户籍登记表扫描件中的所有文字内容，包括手写和印刷文字。"
 
-# Markdown 表格 prompt
-PROMPT_MARKDOWN = (
+# 结构化字段提取 prompt（推荐）— 显式列出字段名，要求逐行输出
+# 不使用 <|grounding|>，避免模型按物理布局输出
+# 注意：必须包含 <image> 标签，模型的 infer() 依赖此标签定位图像 token 插入位置
+PROMPT_STRUCTURED = (
     "<image>\n"
-    "请将这张户籍登记表的内容转换为 markdown 表格。"
+    "请识别这张户籍登记表中每个手写字段的内容。\n"
+    "严格按以下格式逐行输出，每行一个「字段名：值」。看不清的字段留空。\n"
+    "户主或与户主关系：\n"
+    "姓名：\n"
+    "别名：\n"
+    "性别：\n"
+    "出生日期：\n"
+    "出生地址：\n"
+    "籍贯：\n"
+    "民族：\n"
+    "宗教信仰：\n"
+    "婚姻状况：\n"
+    "文化程度：\n"
+    "职业：\n"
+    "服务处所：\n"
+    "本市其他住所：\n"
+    "公民证代号号码：\n"
+    "签发机关：\n"
+    "签发日期：\n"
+    "何时由何地迁来本市：\n"
+    "何时由本市何处迁来本地：\n"
+    "注销户口日期和原因：\n"
+    "户口登记事项变更更正记载：\n"
+)
+
+# Markdown 表格 prompt — 使用 <|grounding|> 提升结构化输出质量
+PROMPT_MARKDOWN = (
+    "<image>\n<|grounding|>请将这张户籍登记表的内容转换为 markdown 表格。"
+    "只使用 markdown 表格格式（| 字段 | 值 |），不要使用 HTML 标签。"
     "请仔细识别每一个手写填写的文字，不要遗漏。如果某个字段看不清，请标注[模糊]。"
 )
 
-# JSON prompt（强制结构化输出）
+# JSON prompt（强制结构化输出）— <|grounding|> 已启用
 CARD_OCR_PROMPT = (
     "<image>\n"
     "<|grounding|>这是50年代常住人口登记表的扫描件，黄色底色，包含手写和印刷文字。\n"
@@ -169,6 +200,18 @@ PROMPT_ENGLISH = (
     "Please transcribe ALL text you can see, both printed and handwritten. "
     "Output each field name and its value. Focus especially on the handwritten text in each field."
 )
+
+
+# ── 投票结果 ──
+
+
+@dataclass
+class VotingResult:
+    """多轮投票识别结果"""
+    card: HouseholdCard                          # 投票后的合并结果
+    confidence: dict[str, float] = field(default_factory=dict)  # 字段名→置信度
+    raw_results: list[HouseholdCard] = field(default_factory=list)  # 各轮结果
+    rounds: int = 0                              # 实际执行轮数
 
 
 # ── 字段名映射（中文 → HouseholdCard 属性）──

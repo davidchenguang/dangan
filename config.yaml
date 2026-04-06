@@ -21,12 +21,14 @@ preprocess:
   binarize: false          # 二值化（默认关闭，DeepSeek-OCR-2 对灰度图效果更好）
 
 ocr:
-  # 推理参数（硬编码最佳值，一般无需修改）
+  # 推理参数（参考 DeepSeek-OCR-2 Demo 最佳实践）
+  # 分辨率预设: Default(1024/768), Quality(1280/960), Fast(1024/640)
   base_size: 1024
   image_size: 768
   crop_mode: true          # 必须开启 — 放大后需要 crop 产生多 patch
-  eval_mode: true          # 必须为 True
-  prompt: "json"            # 默认 Prompt 策略: verbatim | markdown | json
+  prompt: "verbatim"         # 默认 Prompt 策略: verbatim | structured | markdown | json
+
+  voting_rounds: 3         # 多轮投票次数（1=单轮不投票，3=三次取众数）
 
 export:
   default_dir: "./output"

@@ -2,7 +2,11 @@
 
 import pytest
 
-from core.deduplicator import deduplicate_output
+from core.deduplicator import (
+    _line_similarity,
+    _truncate_mutating_duplicates,
+    deduplicate_output,
+)
 
 
 class TestDeduplicateOutput:
@@ -55,3 +59,43 @@ class TestDeduplicateOutput:
         result = deduplicate_output(text)
         assert "重要信息1" in result
         assert "重要信息2" in result
+
+
+class TestLineSimilarity:
+    """行相似度计算"""
+
+    def test_identical_lines(self):
+        assert _line_similarity("abc", "abc") == 1.0
+
+    def test_completely_different(self):
+        assert _line_similarity("abc", "xyz") == 0.0
+
+    def test_similar_lines(self):
+        sim = _line_similarity(
+            "何时由何地迁来本市：1952年由无籍迁入",
+            "何时由何地迁来本市的：1952由无籍迁入",
+        )
+        assert 0.7 < sim < 1.0
+
+
+class TestMutatingDuplicates:
+    """渐变式重复检测"""
+
+    def test_truncates_gradually_mutating_lines(self):
+        """应截断逐行渐变的重复内容"""
+        lines = [
+            "有效内容第一行",
+            "何时由何地迁来本市：1952年由无籍迁入",
+            "何时由何地迁来本市的：1952由无籍迁入",
+            "何时由何地迁来本市的：1952由无籍迁入",
+            "何时由何种地迁来本市：1952由无籍迁入",
+        ]
+        result = _truncate_mutating_duplicates(lines, min_repeat=3)
+        assert result is not None
+        assert "有效内容第一行" in result
+
+    def test_preserves_different_content(self):
+        """不相似的内容不应被截断"""
+        lines = ["姓名：张三", "性别：男", "民族：汉"]
+        result = _truncate_mutating_duplicates(lines, min_repeat=3)
+        assert result is None

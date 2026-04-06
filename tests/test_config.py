@@ -45,13 +45,7 @@ class TestAppConfig:
         assert config.ocr_base_size == 1024
         assert config.ocr_image_size == 768
         assert config.ocr_crop_mode is True
-        assert config.ocr_eval_mode is True
-        assert config.ocr_prompt == "json"
-
-    def test_gui_defaults(self):
-        config = AppConfig()
-        config.load()
-
+        assert config.ocr_prompt == "verbatim"
         assert config.thumbnail_size == 120
 
     def test_export_defaults(self):
@@ -104,7 +98,7 @@ class TestAppConfig:
             config.load(config_path)
 
             assert config.model_path == "/custom/model/path"
-            assert config.ocr_prompt == "json"
+            assert config.ocr_prompt == "json"  # 自定义配置指定了 json
             assert config.thumbnail_size == 200
             assert config.preprocess.scale == 3.0
             assert config.preprocess.denoise is True
@@ -135,4 +129,4 @@ class TestAppConfig:
             config = AppConfig()
             config.load(config_path)  # 不应崩溃
             # 应有默认值
-            assert config.ocr_prompt == "json"
+            assert config.ocr_prompt == "structured"

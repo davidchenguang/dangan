@@ -206,6 +206,7 @@ class MainWindow(QMainWindow):
             base_size=config.ocr_base_size,
             image_size=config.ocr_image_size,
             crop_mode=config.ocr_crop_mode,
+            voting_rounds=config.ocr_voting_rounds,
         )
 
         self._model_worker = ModelLoadWorker(self._pipeline)
@@ -454,15 +455,12 @@ class MainWindow(QMainWindow):
     @Slot()
     def _show_settings(self) -> None:
         """显示设置对话框"""
-        try:
-            from gui.settings_dialog import SettingsDialog
-            dialog = SettingsDialog(self._config, self)
-            if dialog.exec():
-                # 配置已更新，可能需要重新加载模型
-                self._config.save()
-                self._status_progress.setText("设置已保存，部分设置需重启生效。")
-        except ImportError:
-            QMessageBox.information(self, "提示", "设置对话框尚未实现。")
+        from gui.settings_dialog import SettingsDialog
+        dialog = SettingsDialog(self._config, self)
+        if dialog.exec():
+            # 配置已更新，可能需要重新加载模型
+            self._config.save()
+            self._status_progress.setText("设置已保存，部分设置需重启生效。")
 
     # ── 辅助 ──
 
