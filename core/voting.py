@@ -85,7 +85,8 @@ class OcrVotingEngine:
         Returns:
             VotingResult 包含合并后的 HouseholdCard + 各字段置信度
         """
-        raw_results: list[HouseholdCard] = []
+        # 每轮结果: list[list[HouseholdCard]] — 外层是轮次，内层是该轮的多列卡片
+        round_results: list[list[HouseholdCard]] = []
         temp_files: list[str] = []  # 需要清理的临时增强图片
 
         try:
@@ -108,44 +109,95 @@ class OcrVotingEngine:
                     continue
 
                 clean_text = deduplicate_output(raw_text)
-                card = self._extractor.extract(clean_text)
-                raw_results.append(card)
+                # 使用 extract_multi 支持多列宽表
+                cards = self._extractor.extract_multi(clean_text)
+                round_results.append(cards)
 
         finally:
             # 清理临时文件
             for f in temp_files:
                 Path(f).unlink(missing_ok=True)
 
-        if not raw_results:
+        if not round_results:
             logger.warning("所有轮次均无有效输出")
             return VotingResult(
                 cards=[HouseholdCard()],
                 rounds=self._rounds,
             )
 
+        # 展平 raw_results 用于 VotingResult.raw_results（向后兼容）
+        flat_results = [c for cards in round_results for c in cards]
+
         # 单轮直接返回
-        if len(raw_results) == 1:
+        if len(round_results) == 1:
             return VotingResult(
-                cards=raw_results,
+                cards=round_results[0],
                 confidence={k: 1.0 for k in _SIMPLE_FIELDS},
-                raw_results=raw_results,
+                raw_results=flat_results,
                 rounds=1,
             )
 
-        # 多轮投票
-        merged_card, confidence = self._merge_by_voting(raw_results)
+        # 多轮投票 — 按列独立合并
+        merged_cards, confidence = self._merge_rounds(round_results)
         logger.info(
-            "投票完成，%d 轮有效，平均置信度: %.2f",
-            len(raw_results),
+            "投票完成，%d 轮有效，%d 列成员，平均置信度: %.2f",
+            len(round_results),
+            len(merged_cards),
             sum(confidence.values()) / max(len(confidence), 1),
         )
 
         return VotingResult(
-            cards=[merged_card],
+            cards=merged_cards,
             confidence=confidence,
-            raw_results=raw_results,
-            rounds=len(raw_results),
+            raw_results=flat_results,
+            rounds=len(round_results),
         )
+
+    def _merge_rounds(
+        self,
+        round_results: list[list[HouseholdCard]],
+    ) -> tuple[list[HouseholdCard], dict[str, float]]:
+        """多轮结果按列独立合并
+
+        如果各轮列数不同，取最大列数作为参考，不足的轮次用空 HouseholdCard 补齐。
+
+        Returns:
+            (merged_cards, confidence_dict)
+        """
+        if not round_results:
+            return [HouseholdCard()], {}
+
+        # 确定最大列数
+        max_cols = max(len(cards) for cards in round_results)
+
+        if max_cols == 0:
+            return [HouseholdCard()], {}
+
+        merged_cards: list[HouseholdCard] = []
+        all_confidence: dict[str, float] = {}
+
+        for col_idx in range(max_cols):
+            # 收集各轮次中该列的卡片
+            col_cards: list[HouseholdCard] = []
+            for cards in round_results:
+                if col_idx < len(cards):
+                    col_cards.append(cards[col_idx])
+                else:
+                    col_cards.append(HouseholdCard())  # 空卡补位
+
+            # 复用已有的单列投票逻辑
+            merged_card, confidence = self._merge_by_voting(col_cards)
+
+            # 为置信度键添加列前缀（避免多列字段冲突）
+            if max_cols > 1:
+                prefixed = {f"col{col_idx}.{k}": v for k, v in confidence.items()}
+            else:
+                prefixed = confidence
+            all_confidence.update(prefixed)
+
+            merged_cards.append(merged_card)
+
+        return merged_cards, all_confidence
 
     @staticmethod
     def _prepare_augmented_image(image_path: str, seed: int = 0) -> str:

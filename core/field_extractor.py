@@ -93,12 +93,21 @@ class FieldExtractor:
         if not raw_text or not raw_text.strip():
             return [HouseholdCard(raw_markdown=raw_text or "")]
 
-        # 尝试多列宽表解析
+        # 尝试多列 Markdown 宽表解析
         cards = self._parse_multi_column_table(raw_text)
         if cards:
             for c in cards:
                 c.raw_markdown = raw_text
             logger.info("多列宽表解析成功，共 %d 列", len(cards))
+            return cards
+
+        # 尝试从描述性文本中拆分多成员
+        multi_dicts = self._extract_multi_from_text(raw_text)
+        if len(multi_dicts) > 1:
+            cards = [self._dict_to_card(d) for d in multi_dicts]
+            for c in cards:
+                c.raw_markdown = raw_text
+            logger.info("多成员拆分成功，共 %d 位成员", len(cards))
             return cards
 
         # 回退：单列常规提取
@@ -340,6 +349,77 @@ class FieldExtractor:
         if fields_dict:
             return self._dict_to_card(fields_dict)
         return None
+
+    # ── 多成员描述性文本拆分 ──
+
+    # 成员边界标记字段：当这些字段重复出现时，表示新成员开始
+    _MEMBER_BOUNDARY_FIELDS = frozenset({"姓名", "户主或与户主关系"})
+
+    def _extract_multi_from_text(self, text: str) -> list[dict[str, str]]:
+        """从描述性文本中提取多成员字段
+
+        策略：收集所有「字段: 值」对，当关键字段（如「姓名」）重复出现时，
+        自动拆分为新成员。
+
+        Returns:
+            字段字典列表，每个字典对应一位成员；单成员时返回 [{}]
+        """
+        # Step 1: 收集所有字段-值对（保留重复，有序）
+        all_pairs: list[tuple[str, str]] = []
+
+        for line in text.split('\n'):
+            line = line.strip().lstrip(',-').strip()
+            if not line:
+                continue
+
+            # 格式1: **字段名**: 值 (Markdown 加粗)
+            m = re.match(r'\*\*(.+?)\*\*\s*[:：]\s*(.+)', line)
+            if not m:
+                # 格式2: 字段名: 值 / 字段名：值 (纯文本键值对)
+                m = re.match(r'([^:：]{2,20})\s*[:：]\s*(.+)', line)
+            if not m:
+                # 格式3: 字段名 | 值 (表格行)
+                m = re.match(r'([^|]{2,20})\|\s*(.+)', line)
+
+            if not m:
+                continue
+
+            key = m.group(1).strip().strip('*').strip()
+            value = m.group(2).strip().strip(',').strip('*').strip()
+
+            if not key or key in self.SKIP_KEYS:
+                continue
+            if not value or value in ('无', '-', '—'):
+                continue
+
+            # 只保留已知字段
+            is_known = key in FIELD_TO_ATTR or self._fuzzy_match_field(key) is not None
+            if is_known:
+                all_pairs.append((key, value))
+
+        if not all_pairs:
+            return [{}]
+
+        # Step 2: 按成员边界拆分
+        members: list[dict[str, str]] = [{}]
+
+        for key, value in all_pairs:
+            # 姓名重复 → 新成员
+            if key in self._MEMBER_BOUNDARY_FIELDS and key in members[-1]:
+                members.append({})
+
+            # 非边界字段重复 → 也视为新成员（如第二个"性别"说明有第二人）
+            elif key in members[-1] and key not in self._MEMBER_BOUNDARY_FIELDS:
+                # 只有当前成员已有该字段时才开新成员
+                # 避免因 OCR 重复输出同一人而误拆
+                pass  # 覆盖当前成员的同字段值
+
+            members[-1][key] = value
+
+        # 过滤空成员
+        members = [m for m in members if m]
+
+        return members if members else [{}]
 
     # ── Level 4: 描述性文本提取 ──
 

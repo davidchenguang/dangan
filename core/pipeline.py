@@ -17,6 +17,7 @@ from core.models import (
     HouseholdCard,
     PreprocessConfig,
     PROMPT_MARKDOWN,
+    PROMPT_MULTI_COLUMN,
     PROMPT_STRUCTURED,
     PROMPT_VERBATIM,
     VotingResult,
@@ -32,6 +33,7 @@ PROMPT_MAP: dict[str, str] = {
     "structured": PROMPT_STRUCTURED,
     "markdown": PROMPT_MARKDOWN,
     "json": CARD_OCR_PROMPT,
+    "multi_column": PROMPT_MULTI_COLUMN,
 }
 
 

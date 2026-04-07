@@ -192,6 +192,15 @@ CARD_OCR_PROMPT = (
     "忽略印章、污渍和装订痕迹，只识别正式填写的文字内容。"
 )
 
+# 多列宽表 prompt — 简洁版，引导 Markdown 表格输出，每位成员一列
+# 参考 PROMPT_MARKDOWN 的简洁风格，避免过长指令导致模型"编造"而非 OCR
+PROMPT_MULTI_COLUMN = (
+    "<image>\n"
+    "<|grounding|>请将这张户籍登记表的内容转换为 Markdown 表格。"
+    "表格有多位成员时，每位成员各占一列。"
+    "只使用 Markdown 表格格式，不要输出其他说明文字。"
+)
+
 # 英文 prompt
 PROMPT_ENGLISH = (
     "<image>\n"
