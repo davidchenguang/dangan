@@ -1,6 +1,7 @@
 """测试 core/config.py — 配置管理"""
 
 import os
+from pathlib import Path
 import tempfile
 
 import pytest
@@ -83,7 +84,7 @@ class TestAppConfig:
     def test_custom_config(self):
         """自定义配置文件"""
         custom_config = {
-            "model": {"path": "/custom/model/path"},
+            "model": {"path": "custom_models/my_model"},
             "ocr": {"prompt": "json"},
             "gui": {"thumbnail_size": 200},
             "preprocess": {"scale": 3.0, "denoise": True},
@@ -97,7 +98,7 @@ class TestAppConfig:
             config = AppConfig()
             config.load(config_path)
 
-            assert config.model_path == "/custom/model/path"
+            assert "custom_models" in config.model_path
             assert config.ocr_prompt == "json"  # 自定义配置指定了 json
             assert config.thumbnail_size == 200
             assert config.preprocess.scale == 3.0

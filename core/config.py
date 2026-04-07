@@ -83,18 +83,43 @@ class AppConfig:
     @property
     def model_path(self) -> str:
         """模型路径"""
-        return self._data.get("model", {}).get(
-            "path",
-            r"C:\Users\cheng\.lmstudio\models\forkjoin-ai\deepseek-ocr-2",
-        )
+        import os
+        from pathlib import Path
+        path = self._data.get("model", {}).get("path")
+        if not path:
+            path = os.environ.get(
+                "DANGAN_MODEL_PATH", 
+                str(_DEFAULT_CONFIG_PATH.parent.parent / "models" / "deepseek-ocr-2")
+            )
+        # 支持相对路径，相对于项目根目录
+        p = Path(path)
+        if not p.is_absolute():
+            p = _DEFAULT_CONFIG_PATH.parent.parent / p
+        return str(p)
 
     @property
     def model_device(self) -> str:
-        return self._data.get("model", {}).get("device", "cuda")
+        device = self._data.get("model", {}).get("device", "auto")
+        if device == "auto" or not device:
+            try:
+                import torch
+                return "cuda" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                return "cpu"
+        return device
 
     @property
     def model_dtype(self) -> str:
-        return self._data.get("model", {}).get("dtype", "bfloat16")
+        dtype = self._data.get("model", {}).get("dtype", "auto")
+        if dtype == "auto" or not dtype:
+            try:
+                import torch
+                if torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+                    return "bfloat16"
+                return "float16"
+            except ImportError:
+                return "float32"
+        return dtype
 
     @property
     def preprocess(self) -> PreprocessConfig:
