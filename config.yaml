@@ -26,9 +26,9 @@ ocr:
   base_size: 1024
   image_size: 768
   crop_mode: true          # 必须开启 — 放大后需要 crop 产生多 patch
-  prompt: "verbatim"         # 默认 Prompt 策略: verbatim | structured | markdown | json
+  prompt: "verbatim"            # Prompt 策略: verbatim（效果最佳）| structured | markdown | json | multi_column
 
-  voting_rounds: 3         # 多轮投票次数（1=单轮不投票，3=三次取众数）
+  voting_rounds: 1         # 投票轮次（1=单轮最高质量，3轮置信度过低不推荐）
 
 export:
   default_dir: "./output"
