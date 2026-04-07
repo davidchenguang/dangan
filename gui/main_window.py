@@ -64,6 +64,7 @@ class MainWindow(QMainWindow):
         # 任务计数器
         self._completed_count: int = 0
         self._total_count: int = 0
+        self._processing: bool = False
 
         # 活跃 Worker 引用（防止 GC 回收导致信号源丢失）
         self._active_workers: list[OcrWorker] = []
@@ -322,6 +323,7 @@ class MainWindow(QMainWindow):
         self._progress_bar.setValue(0)
         self._completed_count = 0
         self._total_count = len(image_ids)
+        self._status_progress.setText("正在识别... 预计需要 2-5 分钟，请耐心等待")
 
         for image_id in image_ids:
             filepath = self._thumbnail_panel.get_filepath(image_id)
@@ -476,6 +478,7 @@ class MainWindow(QMainWindow):
 
     def _set_controls_enabled(self, enabled: bool) -> None:
         """启用/禁用处理相关控件"""
+        self._processing = not enabled
         self._btn_recognize.setEnabled(enabled)
         self._btn_recognize_all.setEnabled(enabled)
         self._btn_stop.setEnabled(not enabled)
@@ -483,5 +486,17 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         """窗口关闭时清理资源"""
         if self._pipeline and self._pipeline.is_initialized:
-            self._pipeline.engine.unload()
+            if getattr(self, '_processing', False):
+                reply = QMessageBox.question(
+                    self, "确认退出",
+                    "OCR 正在处理中，退出可能导致数据丢失。\n确定退出吗？",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                )
+                if reply == QMessageBox.StandardButton.No:
+                    event.ignore()
+                    return
+                # 推理期间不调用 unload()，让 OS 在进程退出时清理 GPU 资源
+                logger.warning("用户在推理期间强制退出，GPU 资源将由操作系统清理")
+            else:
+                self._pipeline.engine.unload()  # 仅空闲时安全卸载
         event.accept()
