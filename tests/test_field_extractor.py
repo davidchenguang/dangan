@@ -1,7 +1,7 @@
 """测试 core/field_extractor.py — 字段提取器"""
 
 import json
-
+from typing import List
 import pytest
 
 from core.field_extractor import FieldExtractor
@@ -131,3 +131,85 @@ class TestFallback:
         data = json.dumps({"姓名": "张三"})
         card = extractor.extract(data)
         assert card.raw_markdown == data
+
+
+class TestMultiColumnExtraction:
+    """多列宽表提取测试 — extract_multi() 应返回多个 HouseholdCard"""
+
+    def test_two_column_markdown_table(self, extractor: FieldExtractor):
+        """标准宽表：| 字段 | 成员1值 | 成员2值 | 应解析出 2 个 HouseholdCard"""
+        text = (
+            "| 字段名 | 户主 | 妻 |\n"
+            "|--------|------|-----|\n"
+            "| 姓名 | 王盛祥 | 马妇女 |\n"
+            "| 性别 | 男 | 女 |\n"
+            "| 籍贯 | 辽宁省抚顺县 | 河北省任邱县 |\n"
+            "| 民族 | 汉 | 汉 |\n"
+        )
+        cards = extractor.extract_multi(text)
+        assert isinstance(cards, list)
+        assert len(cards) == 2
+        assert cards[0].name == "王盛祥"
+        assert cards[0].gender == "男"
+        assert cards[0].relation_to_household_head == "户主"
+        assert cards[1].name == "马妇女"
+        assert cards[1].gender == "女"
+        assert cards[1].relation_to_household_head == "妻"
+
+    def test_two_column_native_place(self, extractor: FieldExtractor):
+        """多列宽表中籍贯字段正确分配"""
+        text = (
+            "| 字段名 | 户主 | 妻 |\n"
+            "|--------|------|-----|\n"
+            "| 籍贯 | 辽宁省抚顺县肖家沟 | 河北省任邱县七间房乡 |\n"
+        )
+        cards = extractor.extract_multi(text)
+        assert len(cards) == 2
+        assert "辽宁" in cards[0].native_place
+        assert "河北" in cards[1].native_place
+
+    def test_single_column_returns_one_card(self, extractor: FieldExtractor):
+        """单列宽表仍返回含一个 HouseholdCard 的列表"""
+        text = (
+            "| 字段名 | 值 |\n"
+            "|--------|-----|\n"
+            "| 姓名 | 张三 |\n"
+            "| 性别 | 男 |\n"
+        )
+        cards = extractor.extract_multi(text)
+        assert isinstance(cards, list)
+        assert len(cards) >= 1
+        assert cards[0].name == "张三"
+
+    def test_raw_markdown_set_on_all_cards(self, extractor: FieldExtractor):
+        """所有返回的卡片都应有 raw_markdown"""
+        text = (
+            "| 字段名 | 户主 | 妻 |\n"
+            "|--------|------|-----|\n"
+            "| 姓名 | 王盛祥 | 马妇女 |\n"
+        )
+        cards = extractor.extract_multi(text)
+        for card in cards:
+            assert card.raw_markdown == text
+
+    def test_three_column_table(self, extractor: FieldExtractor):
+        """三列宽表应解析出 3 个 HouseholdCard"""
+        text = (
+            "| 字段名 | 成员1 | 成员2 | 成员3 |\n"
+            "|--------|-------|-------|-------|\n"
+            "| 姓名 | 张大 | 张二 | 张三 |\n"
+            "| 性别 | 男 | 女 | 男 |\n"
+        )
+        cards = extractor.extract_multi(text)
+        assert len(cards) == 3
+        assert cards[0].name == "张大"
+        assert cards[1].name == "张二"
+        assert cards[2].name == "张三"
+
+    def test_fallback_to_extract_for_non_table(self, extractor: FieldExtractor):
+        """非多列格式时 extract_multi 回退为 [extract()]"""
+        data = json.dumps({"姓名": "张三", "性别": "男"})
+        cards = extractor.extract_multi(data)
+        assert isinstance(cards, list)
+        assert len(cards) >= 1
+        assert cards[0].name == "张三"

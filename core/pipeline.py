@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from core.deduplicator import deduplicate_output
@@ -38,12 +38,17 @@ PROMPT_MAP: dict[str, str] = {
 @dataclass
 class PipelineResult:
     """流水线处理结果"""
-    card: HouseholdCard
+    cards: list[HouseholdCard] = field(default_factory=list)
     preprocessed_path: str | None = None
     elapsed_seconds: float = 0.0
     success: bool = True
     error: str = ""
     confidence: dict[str, float] | None = None  # 投票置信度（多轮模式）
+
+    @property
+    def card(self) -> HouseholdCard:
+        """向后兼容：返回第一个卡片"""
+        return self.cards[0] if self.cards else HouseholdCard()
 
 
 class OcrPipeline:
@@ -128,7 +133,7 @@ class OcrPipeline:
                     rounds=self._voting_rounds,
                 )
                 voting_result = voter.recognize_with_voting(actual_image, prompt)
-                card = voting_result.card
+                cards = voting_result.cards
                 confidence = voting_result.confidence
                 logger.info(
                     "投票完成: %d 轮，平均置信度 %.2f",
@@ -139,16 +144,17 @@ class OcrPipeline:
                 # 单轮模式（向后兼容）
                 raw_text = self._engine.recognize(actual_image, prompt)
                 clean_text = deduplicate_output(raw_text)
-                card = self._extractor.extract(clean_text)
+                cards = self._extractor.extract_multi(clean_text)
                 confidence = {}
 
-            card.source_image = str(image_path)
+            for c in cards:
+                c.source_image = str(image_path)
 
             elapsed = _time.time() - start
             logger.info("处理完成: %s (%.1fs)", Path(image_path).name, elapsed)
 
             return PipelineResult(
-                card=card,
+                cards=cards,
                 preprocessed_path=actual_image if preprocess else None,
                 elapsed_seconds=elapsed,
                 success=True,
@@ -159,7 +165,7 @@ class OcrPipeline:
             elapsed = _time.time() - start
             logger.error("处理失败: %s - %s", image_path, e)
             return PipelineResult(
-                card=HouseholdCard(source_image=str(image_path)),
+                cards=[HouseholdCard(source_image=str(image_path))],
                 elapsed_seconds=elapsed,
                 success=False,
                 error=str(e),

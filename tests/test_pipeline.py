@@ -29,7 +29,7 @@ class TestPipelineResult:
     """PipelineResult 数据结构"""
 
     def test_default_values(self):
-        result = PipelineResult(card=HouseholdCard())
+        result = PipelineResult(cards=[HouseholdCard()])
         assert result.success is True
         assert result.error == ""
         assert result.confidence is None
@@ -37,12 +37,20 @@ class TestPipelineResult:
 
     def test_error_result(self):
         result = PipelineResult(
-            card=HouseholdCard(),
+            cards=[HouseholdCard()],
             success=False,
             error="测试错误",
         )
         assert result.success is False
         assert result.error == "测试错误"
+
+    def test_multi_card_result(self):
+        """PipelineResult 应支持存储多个卡片"""
+        cards = [HouseholdCard(name="王盛祥"), HouseholdCard(name="马妇女")]
+        result = PipelineResult(cards=cards)
+        assert len(result.cards) == 2
+        assert result.cards[0].name == "王盛祥"
+        assert result.cards[1].name == "马妇女"
 
 
 class TestOcrPipelineInit:
@@ -111,6 +119,17 @@ class TestOcrPipelineProcess:
         assert result.success is False
         assert "OCR 失败" in result.error
 
+    def test_result_has_cards_list(self):
+        """返回结果应导出 cards 列表"""
+        pipeline = self._make_pipeline()
+        pipeline._engine.recognize.return_value = "**姓名**：张三"
+
+        result = pipeline.process("input.jpg", preprocess=False)
+
+        assert hasattr(result, "cards")
+        assert isinstance(result.cards, list)
+        assert len(result.cards) >= 1
+
     def test_multi_round_calls_voting(self):
         """voting_rounds > 1 应使用投票引擎"""
         pipeline = self._make_pipeline()
@@ -119,7 +138,7 @@ class TestOcrPipelineProcess:
         # Mock 投票引擎
         with patch("core.voting.OcrVotingEngine") as MockVoter:
             mock_result = MagicMock()
-            mock_result.card = HouseholdCard(name="张三")
+            mock_result.cards = [HouseholdCard(name="张三")]
             mock_result.confidence = {"name": 1.0}
             mock_result.rounds = 3
             MockVoter.return_value.recognize_with_voting.return_value = mock_result

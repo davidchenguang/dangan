@@ -208,10 +208,15 @@ PROMPT_ENGLISH = (
 @dataclass
 class VotingResult:
     """多轮投票识别结果"""
-    card: HouseholdCard                          # 投票后的合并结果
+    cards: list["HouseholdCard"] = field(default_factory=list)   # 投票后的合并结果（多列支持）
     confidence: dict[str, float] = field(default_factory=dict)  # 字段名→置信度
-    raw_results: list[HouseholdCard] = field(default_factory=list)  # 各轮结果
+    raw_results: list["HouseholdCard"] = field(default_factory=list)  # 各轮结果
     rounds: int = 0                              # 实际执行轮数
+
+    @property
+    def card(self) -> "HouseholdCard":
+        """向后兼容：返回第一个卡片（单列模式）"""
+        return self.cards[0] if self.cards else HouseholdCard()
 
 
 # ── 字段名映射（中文 → HouseholdCard 属性）──

@@ -138,7 +138,7 @@ class TestOcrVotingEngineIntegration:
         voter = OcrVotingEngine(engine=mock_engine, rounds=2)
         result = voter.recognize_with_voting("fake.jpg", "prompt")
 
-        assert result.card.name == "张三"
+        assert result.cards[0].name == "张三"
         assert result.rounds == 2
 
     def test_all_empty_outputs(self):
@@ -149,7 +149,7 @@ class TestOcrVotingEngineIntegration:
         voter = OcrVotingEngine(engine=mock_engine, rounds=2)
         result = voter.recognize_with_voting("fake.jpg", "prompt")
 
-        assert result.card.name == ""
+        assert result.cards[0].name == ""
         assert result.rounds == 2
 
     def test_single_round_skips_voting(self):
@@ -160,7 +160,7 @@ class TestOcrVotingEngineIntegration:
         voter = OcrVotingEngine(engine=mock_engine, rounds=1)
         result = voter.recognize_with_voting("fake.jpg", "prompt")
 
-        assert result.card.name == "张三"
+        assert result.cards[0].name == "张三"
         assert result.rounds == 1
         assert all(v == 1.0 for v in result.confidence.values())
 

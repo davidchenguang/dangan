@@ -78,6 +78,117 @@ class FieldExtractor:
         logger.warning("所有提取策略均失败，保留原始文本")
         return HouseholdCard(raw_markdown=raw_text)
 
+    def extract_multi(self, raw_text: str) -> list[HouseholdCard]:
+        """从 OCR 输出中提取多个 HouseholdCard（支持多列宽表）
+
+        当 OCR 输出包含户籍卡多列（如户主+妻+子）的宽表时，
+        自动按列拆分生成对应数量的 HouseholdCard。
+
+        Args:
+            raw_text: OCR 原始输出文本
+
+        Returns:
+            HouseholdCard 列表，多列时多个，单列/非表格时一个
+        """
+        if not raw_text or not raw_text.strip():
+            return [HouseholdCard(raw_markdown=raw_text or "")]
+
+        # 尝试多列宽表解析
+        cards = self._parse_multi_column_table(raw_text)
+        if cards:
+            for c in cards:
+                c.raw_markdown = raw_text
+            logger.info("多列宽表解析成功，共 %d 列", len(cards))
+            return cards
+
+        # 回退：单列常规提取
+        card = self.extract(raw_text)
+        return [card]
+
+    # ── 多列宽表解析 ──
+
+    def _parse_multi_column_table(self, text: str) -> list[HouseholdCard] | None:
+        """解析多列 Markdown 宽表
+
+        表格格式示例 (3列):
+            | 字段名  | 户主   | 妻     |
+            |---------|--------|--------|
+            | 姓名    | 王盛祥 | 马妇女 |
+            | 性别    | 男     | 女     |
+
+        首列为字段名，其余各列对应一个成员。
+        表头第一行的非字段列标题将用作 relation_to_household_head。
+
+        Returns:
+            list[HouseholdCard] 或 None（不是宽表时）
+        """
+        lines = [l.strip() for l in text.split('\n') if l.strip()]
+        table_lines = [l for l in lines if '|' in l]
+
+        if len(table_lines) < 2:
+            return None
+
+        # 解析所有行
+        rows: list[list[str]] = []
+        for line in table_lines:
+            parts = [p.strip() for p in line.split('|')]
+            parts = [p for p in parts if p]
+            if not parts:
+                continue
+            # 跳过分隔行
+            if all(set(p) <= {'-', ':', ' '} for p in parts):
+                continue
+            rows.append(parts)
+
+        if not rows:
+            return None
+
+        # 第一行为表头：[字段名列, 成员1标题, 成员2标题, ...]
+        header = rows[0]
+        num_cols = len(header) - 1  # 去掉字段名列
+
+        if num_cols < 1:
+            return None
+
+        # 单列情况交给普通解析（avoid double-parsing）
+        # 但如果列标题不是通用"值"/"内容"，说明是显式多成员表
+        member_headers = header[1:]
+
+        # 构建每个成员的字段字典
+        member_dicts: list[dict[str, str]] = [{} for _ in range(num_cols)]
+
+        # 将成员标题作为 relation_to_household_head 预填
+        for i, h in enumerate(member_headers):
+            if h and h not in ("值", "内容", "识别值", "value"):
+                member_dicts[i]["户主或与户主关系"] = h
+
+        # 遍历数据行，填充字段值
+        for row in rows[1:]:
+            if not row:
+                continue
+            field_name = row[0]
+            if field_name in self.SKIP_KEYS:
+                continue
+            for col_idx in range(num_cols):
+                value_idx = col_idx + 1
+                if value_idx < len(row):
+                    value = row[value_idx].strip()
+                    if value and value not in ('-', '—', '无'):
+                        if field_name not in member_dicts[col_idx]:
+                            member_dicts[col_idx][field_name] = value
+
+        # 检查解析是否有意义（至少有一列有字段命中）
+        known_hits = sum(
+            1 for d in member_dicts
+            for k in d if k in FIELD_TO_ATTR or self._fuzzy_match_field(k) is not None
+        )
+        if known_hits == 0:
+            return None
+
+        # 转换为 HouseholdCard
+        cards = [self._dict_to_card(d) for d in member_dicts]
+        return cards if cards else None
+
     # ── Level 1: JSON 解析 ──
 
     def _parse_json(self, text: str) -> HouseholdCard | None:

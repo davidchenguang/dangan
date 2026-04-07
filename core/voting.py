@@ -119,14 +119,14 @@ class OcrVotingEngine:
         if not raw_results:
             logger.warning("所有轮次均无有效输出")
             return VotingResult(
-                card=HouseholdCard(),
+                cards=[HouseholdCard()],
                 rounds=self._rounds,
             )
 
         # 单轮直接返回
         if len(raw_results) == 1:
             return VotingResult(
-                card=raw_results[0],
+                cards=raw_results,
                 confidence={k: 1.0 for k in _SIMPLE_FIELDS},
                 raw_results=raw_results,
                 rounds=1,
@@ -141,7 +141,7 @@ class OcrVotingEngine:
         )
 
         return VotingResult(
-            card=merged_card,
+            cards=[merged_card],
             confidence=confidence,
             raw_results=raw_results,
             rounds=len(raw_results),
