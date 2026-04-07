@@ -44,6 +44,16 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
 
+    # 单实例锁：防止多进程竞争 GPU 显存
+    import msvcrt
+    lock_path = os.path.join(os.environ.get("TEMP", "."), "dangan_ocr.lock")
+    try:
+        _lock_fd = open(lock_path, "w")
+        msvcrt.locking(_lock_fd.fileno(), msvcrt.LK_NBLCK, 1)
+    except (OSError, IOError):
+        print("已有一个户籍卡 OCR 实例正在运行，不可重复启动。", file=sys.stderr)
+        return 1
+
     setup_logging()
     logger = logging.getLogger("main")
     logger.info("启动户籍卡 OCR 识别系统")
