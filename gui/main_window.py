@@ -55,8 +55,8 @@ class MainWindow(QMainWindow):
         self._config = AppConfig()
         self._config.load()
 
-        # 数据存储: image_id → HouseholdCard
-        self._results: dict[str, HouseholdCard] = {}
+        # 数据存储: image_id → list[HouseholdCard]
+        self._results: dict[str, list] = {}
 
         # 流水线（懒加载）
         self._pipeline: OcrPipeline | None = None
@@ -264,9 +264,9 @@ class MainWindow(QMainWindow):
         self._image_viewer.load_image(filepath)
 
         # 如果已有识别结果，显示
-        card = self._results.get(image_id)
-        if card:
-            self._result_table.display_card(card)
+        cards = self._results.get(image_id)
+        if cards:
+            self._result_table.display_cards(cards)
         else:
             self._result_table.clear()
 
@@ -314,9 +314,8 @@ class MainWindow(QMainWindow):
     def _submit_ocr_tasks(self, image_ids: list[str]) -> None:
         """提交 OCR 任务"""
         if not self._pipeline or not self._pipeline.is_initialized:
-            QMessageBox.warning(self, "提示", "模型尚未加载完成，请稍候。")
+            QMessageBox.warning(self, "提示", "模型未完成加载，请稍候。")
             return
-
         self._set_controls_enabled(False)
         self._progress_bar.setVisible(True)
         self._progress_bar.setRange(0, len(image_ids))
@@ -346,16 +345,28 @@ class MainWindow(QMainWindow):
     def _on_ocr_result(self, image_id: str, result: PipelineResult) -> None:
         """OCR 识别完成"""
         if result.success:
-            self._results[image_id] = result.card
+            cards = result.cards
+            self._results[image_id] = cards
             self._thumbnail_panel.update_status(image_id, ProcessingStatus.DONE)
 
             # 如果是当前选中的图片，更新显示
             current_id = self._thumbnail_panel.get_current_image_id()
             if image_id == current_id:
-                self._result_table.display_card(result.card)
+                self._result_table.display_cards(cards)
         else:
             self._thumbnail_panel.update_status(image_id, ProcessingStatus.FAILED)
             logger.error("OCR 失败 [%s]: %s", image_id, result.error)
+            
+            # 显示错误弹窗
+            QMessageBox.warning(self, "识别失败", f"图片 [{image_id}] 处理失败:\n{result.error}")
+
+            
+            # 即使失败也应该记录空的或只含有 raw_markdown 的结果，让 UI 能够展示降级信息
+            if result.cards:
+                self._results[image_id] = result.cards
+                current_id = self._thumbnail_panel.get_current_image_id()
+                if image_id == current_id:
+                    self._result_table.display_cards(result.cards)
 
     @Slot(str, str)
     def _on_ocr_error(self, image_id: str, error: str) -> None:
@@ -412,18 +423,19 @@ class MainWindow(QMainWindow):
         if filepath:
             from core.exporter import ResultExporter
             exporter = ResultExporter()
-            card = self._result_table.get_card()
-            exporter.export([card], filepath)
+            cards = self._result_table.get_cards()
+            exporter.export(cards, filepath)
             QMessageBox.information(self, "成功", f"已导出到:\n{filepath}")
 
     @Slot()
     def _export_all(self) -> None:
         """导出全部结果"""
-        # 收集已识别的结果
+        # 收集已识别的结果（展平可能的多卡片列表）
         recognized_cards = [
-            self._results[id_]
+            card
             for id_ in self._thumbnail_panel.get_all_image_ids()
             if id_ in self._results
+            for card in self._results[id_]
         ]
         total = len(self._thumbnail_panel.get_all_image_ids())
         recognized = len(recognized_cards)
@@ -440,11 +452,9 @@ class MainWindow(QMainWindow):
             if not filepaths:
                 return
 
-            cards = recognized_cards
-
             from core.exporter import ResultExporter
             exporter = ResultExporter()
-            exported = exporter.export_multi(cards, filepaths)
+            exported = exporter.export_multi(recognized_cards, filepaths)
 
             if exported:
                 msg = "已导出:\n" + "\n".join(f"  • {p}" for p in exported)
