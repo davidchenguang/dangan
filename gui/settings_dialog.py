@@ -61,7 +61,7 @@ class SettingsDialog(QDialog):
         model_layout.addRow("", browse_btn)
 
         self._prompt_combo = QComboBox()
-        self._prompt_combo.addItems(["verbatim", "markdown", "json"])
+        self._prompt_combo.addItems(["multi_column", "verbatim", "structured", "markdown", "json"])
         model_layout.addRow("默认 Prompt:", self._prompt_combo)
 
         layout.addWidget(model_group)

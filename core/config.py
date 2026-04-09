@@ -142,7 +142,7 @@ class AppConfig:
 
     @property
     def ocr_prompt(self) -> str:
-        return self._data.get("ocr", {}).get("prompt", "structured")
+        return self._data.get("ocr", {}).get("prompt", "multi_column")
 
     @property
     def ocr_voting_rounds(self) -> int:

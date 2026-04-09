@@ -46,7 +46,7 @@ class TestAppConfig:
         assert config.ocr_base_size == 1024
         assert config.ocr_image_size == 768
         assert config.ocr_crop_mode is True
-        assert config.ocr_prompt == "verbatim"
+        assert config.ocr_prompt == "multi_column"
         assert config.thumbnail_size == 120
 
     def test_export_defaults(self):
@@ -130,4 +130,4 @@ class TestAppConfig:
             config = AppConfig()
             config.load(config_path)  # 不应崩溃
             # 应有默认值
-            assert config.ocr_prompt == "structured"
+            assert config.ocr_prompt == "multi_column"

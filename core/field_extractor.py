@@ -371,6 +371,8 @@ class FieldExtractor:
             line = line.strip().lstrip(',-').strip()
             if not line:
                 continue
+            # 剥离编号前缀（"1. "、"15. " 等），使正则能匹配 **字段名** 格式
+            line = re.sub(r'^\d+\.\s*', '', line)
 
             # 格式1: **字段名**: 值 (Markdown 加粗)
             m = re.match(r'\*\*(.+?)\*\*\s*[:：]\s*(.+)', line)
@@ -392,10 +394,12 @@ class FieldExtractor:
             if not value or value in ('无', '-', '—'):
                 continue
 
-            # 只保留已知字段
-            is_known = key in FIELD_TO_ATTR or self._fuzzy_match_field(key) is not None
-            if is_known:
-                all_pairs.append((key, value))
+            # 只保留已知字段，并规范化键名用于成员拆分
+            matched_attr = FIELD_TO_ATTR.get(key) or self._fuzzy_match_field(key)
+            if matched_attr:
+                # 用规范化名称替代原始键名
+                canonical = ATTR_TO_LABEL.get(matched_attr, key)
+                all_pairs.append((canonical, value))
 
         if not all_pairs:
             return [{}]
@@ -438,6 +442,8 @@ class FieldExtractor:
             line = line.strip().lstrip(',-').strip()
             if not line:
                 continue
+            # 剥离编号前缀（"1. "、"15. " 等），使正则能匹配 **字段名** 格式
+            line = re.sub(r'^\d+\.\s*', '', line)
 
             # 格式1: **字段名**: 值 (Markdown 加粗)
             m = re.match(r'\*\*(.+?)\*\*\s*[:：]\s*(.+)', line)

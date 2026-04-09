@@ -133,13 +133,21 @@ def _truncate_mutating_duplicates(lines: list[str], min_repeat: int = 3) -> str 
                 break  # 不再相似，停止
 
         if similar_count >= min_repeat:
-            # 保留到重复起点（含第一行），截断后续
+            # 保留到重复起点（含第一行），跳过重复段落，保留后续非重复内容
             kept = lines[:i + 1]
+            remaining = lines[i + similar_count:]
+            if remaining:
+                # 只保留与 base 不再相似的后续行（避免保留连续重复的尾巴）
+                valid_remaining = []
+                for r_line in remaining:
+                    if r_line.strip() and _line_similarity(base, r_line.strip()) < 0.75:
+                        valid_remaining.append(r_line)
+                kept.extend(valid_remaining)
             removed = len(lines) - len(kept)
             if removed > 0:
                 logger.debug(
-                    "渐变式重复检测: 第 %d 行起 %d 行重复 (相似度>75%%)",
-                    i + 1, similar_count,
+                    "渐变式重复检测: 第 %d 行起 %d 行重复，保留后续 %d 行",
+                    i + 1, similar_count, len(remaining) if remaining else 0,
                 )
                 return '\n'.join(kept) + f'\n... (已截断 {removed} 行渐变重复)'
 

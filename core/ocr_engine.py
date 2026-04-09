@@ -139,13 +139,13 @@ class DeepSeekOCREngine(OCREngine):
         """执行 OCR 识别
 
         参考 DeepSeek-OCR-2 Demo 最佳实践:
-        - 不传 eval_mode 参数（Demo 未使用）
+        - eval_mode=True 使 infer() 返回解码文本（而非 stdout 流式输出）
         - save_results=False 避免创建多余文件
         - stdout 捕获作为结果提取的备用方案
 
         Args:
             image_path: 图片文件路径
-            prompt: OCR Prompt（不含 <image> 标签，infer() 内部处理）
+            prompt: OCR Prompt（需含 <image> 标签，模型 infer() 依赖此标签定位图像 token）
             temperature: 生成温度（0.0=确定性，>0.0=随机采样）
 
         Returns:
@@ -199,17 +199,11 @@ class DeepSeekOCREngine(OCREngine):
 
         elapsed = time.time() - start
 
-        # 诊断日志：捕获 infer() 原始返回值
         _stdout_text = _stdout_capture.getvalue()
-        logger.info(
-            "infer() 返回值类型=%s, repr 前200字符=%s",
+        logger.debug(
+            "infer() 返回值类型=%s, stdout长度=%d",
             type(result).__name__,
-            repr(result)[:200] if result is not None else "None",
-        )
-        logger.info(
-            "stdout 捕获长度=%d, 内容前200字符=%s",
             len(_stdout_text),
-            _stdout_text[:200],
         )
 
         # 结果提取：优先使用返回值，备用 stdout 捕获
